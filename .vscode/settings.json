@@ -1,0 +1,21 @@
+{
+  "redisXplorer.config": {
+    "profiles": [
+      {
+        "name": "socialabs",
+        "host": "socialabs.redis.cache.windows.net",
+        "accessKey": "bAIWiI43YPRbO0QfOE0gAZoO2XIM2Mz1OAzCaC9hwTI=",
+        "filter": "*",
+        "port": "6379"
+      },
+      {
+        "name": "local",
+        "host": "localhost",
+        "accessKey": "",
+        "filter": "*",
+        "port": "6979"
+      }
+    ],
+    "scanLimit": 200
+  }
+}
