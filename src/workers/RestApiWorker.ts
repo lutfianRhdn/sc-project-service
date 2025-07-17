@@ -1,7 +1,7 @@
 import { Worker } from "./Worker";
 import { v4 as uuidv4 } from "uuid";
 import log from "../utils/log";
-import { Controller, Get, attachControllers,Request,Response, Post } from "@decorators/express";
+import { Controller, Get, attachControllers,Request,Response, Post, Params } from "@decorators/express";
 import express, { Express } from "express";
 import * as jwt from "jsonwebtoken";
 import EventEmitter from "events";
@@ -76,7 +76,9 @@ export class RestApiWorker implements Worker {
 					`[RestApiWorker] Received message: ${messageId}`,
 					"info"
 				);
-				const destinationFiltered = destination.filter((d) => d.includes("RestApiWorker"));
+				const destinationFiltered = destination.filter((d) =>
+					d.includes("RestApiWorker")
+				);
 				destinationFiltered.forEach((dest) => {
 					log(
 						`[RestApiWorker] Processing message for destination: ${dest}`,
@@ -84,11 +86,6 @@ export class RestApiWorker implements Worker {
 					);
 					const destinationSplited = dest.split("/");
 					const path = destinationSplited[1]; // Get the path from the destination
-					// const subPath = destinationSplited[2]; // Get the subpath from the destination
-					// log(
-					// 	`[RestApiWorker] Calling method: ${path} with subPath: ${subPath}`,
-					// 	"info"
-					// );
 					this[path](message);
 				});
 			});
@@ -168,8 +165,7 @@ export class RestApiWorker implements Worker {
 						`[RestApiWorker] Received message for ID: ${messageId}`,
 						"info"
 					);
-					resolve(message.data);
-					// res.json({ data: message.data });
+					resolve(message.data == null ? {} : message.data);
 					log(
 						`[RestApiWorker] Response sent for ID: ${messageId}`,
 						"info"
@@ -190,6 +186,7 @@ export class RestApiWorker implements Worker {
 			const result = await this.sendMessageToOtherWorker({}, [
 				`DatabaseInteractionWorker/getAllData/${userId}`,
 			]);
+			console.log({result});
 			if (result) {
 				res.json({ data: result });
 			}
@@ -202,6 +199,40 @@ export class RestApiWorker implements Worker {
 			return res.json({ error: error.message });
 		}
 	}
+	@Get("/:id")
+	async getDataById(
+		@Request() req,
+		@Response() res,
+		@Params("id") id: string
+	) {
+		try {
+			// const userId = await this.getuserId(
+			// 	req.headers.authorization,
+			// 	res
+			// );
+
+			if (!id) {
+				log(`[RestApiWorker] Data ID not provided`, "warn");
+				return res
+					.status(400)
+					.json({ error: "Data ID is required" });
+			}
+			const result = await this.sendMessageToOtherWorker({}, [
+				`DatabaseInteractionWorker/getDataById/${id}`,
+			]);
+			if (result) {
+				res.json({ data: result });
+			}
+		} catch (error) {
+			console.log(error);
+			log(
+				`[RestApiWorker] Error in getData: ${error.message}`,
+				"error"
+			);
+			return res.json({ error: error.message });
+		}
+	}
+
 	@Post("/")
 	async postData(@Request() req, @Response() res) {
 		const {
@@ -223,21 +254,32 @@ export class RestApiWorker implements Worker {
 			const idempotentKey = req.headers["idempotent-key"];
 			if (!idempotentKey) {
 				log(`[RestApiWorker] Idempotent key not provided`, "warn");
-				return res.status(400).json({ error: "Idempotent key required" });
+				return res
+					.status(400)
+					.json({ error: "Idempotent key required" });
 			}
 			// Check if the idempotent key already exists
 			const idempotent = new Idempotent();
-			const isIdempotent = await idempotent.checkIdempotent(idempotentKey);
+			const isIdempotent = await idempotent.checkIdempotent(
+				idempotentKey
+			);
 			if (isIdempotent) {
 				log(
 					`[RestApiWorker] Idempotent operation detected for key: ${idempotentKey}`,
 					"warn"
 				);
-				const data = this.sendMessageToOtherWorker({
-							keyword,start_date_crawl,end_date_crawl,
-						},[`DatabaseInteractionWorker/getDataByKeywordAndRange`]
-				)
-				return res.status(208).json({data, message: "Operation already processed" });
+				const data = this.sendMessageToOtherWorker(
+					{
+						keyword,
+						start_date_crawl,
+						end_date_crawl,
+					},
+					[`DatabaseInteractionWorker/getDataByKeywordAndRange`]
+				);
+				return res.status(208).json({
+					data,
+					message: "Operation already processed",
+				});
 			}
 			// Set the idempotent key to prevent duplicate processing
 			await idempotent.setIdempotent(idempotentKey, "processed");
@@ -258,7 +300,7 @@ export class RestApiWorker implements Worker {
 			);
 			log(`[RestApiWorker] Data created successfully`, "success");
 
-			idempotent.removeIdempotent(idempotentKey)
+			idempotent.removeIdempotent(idempotentKey);
 			return res.status(201).json({ data: result });
 		} catch (error) {
 			log(

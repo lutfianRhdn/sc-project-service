@@ -105,7 +105,7 @@ export default class DatabaseInteractionWorker implements Worker {
 	}
 	public async getDataById({id}): Promise<any> {
 		try {
-			const data = await this.collection.findOne({_id: new mongoDB.ObjectId(id)});
+			const data = await this.collection.findOne({ _id: new mongoDB.ObjectId(id) });
 			if (!data) {
 				log(`[DatabaseInteractionWorker] No data found for ID: ${id}`, 'warn');
 				return { data: null, destination: [`RestApiWorker/onProcessedMessage`] };

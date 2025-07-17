@@ -69,7 +69,7 @@ export default class Supervisor {
 				],
 				{
 					stdio: ["inherit", "inherit", "inherit", "ipc"],
-					env: { ...config },
+					env: { ...config, },
 				}
 			);
 
