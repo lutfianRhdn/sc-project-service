@@ -20,22 +20,3 @@ export function sendMessagetoSupervisor({
 }: Message): void {
 	process.send!({ status: status, messageId,destination, reason, data });
 }
-export function reciveMessage(): Promise<any> {
-  return new Promise((resolve) => {
-    process.on("message", (data: string) => {
-      const messageParse = JSON.parse(data.toString());
-      if (!messageParse.data) {
-        console.error("Received message does not contain 'data' field"); 
-        sendMessagetoSupervisor({
-          messageId: messageParse.messageId || "unknown",
-          status: "failed",
-          reason: "Invalid message format",
-          data: [],
-        });
-        return;
-      }
-      log(`Message ${messageParse.messageId} received`, );
-      resolve(messageParse);
-    });
-  });
-}

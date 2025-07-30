@@ -40,23 +40,34 @@ export default class Supervisor {
 			worker: "RabbitMQWorker",
 			...workerConfig.RabbitMQWorker,
 		});
-		setInterval(() => this.checkWorkerHealth(), 10000); // Check worker health every 10 seconds
+		setInterval(() => this.checkWorkerHealth(), 10000); 
 		log("[Supervisor] Supervisor initialized");
 	}
 
-	createWorker({ worker, count, config,cpu,memory }: CreateWorkerOptions): void {
+	createWorker({
+		worker,
+		count,
+		config,
+		cpu,
+		memory,
+	}: CreateWorkerOptions): void {
 		if (count <= 0) {
-			log("[Supervisor] Worker count must be greater than zero","error");
+			log(
+				"[Supervisor] Worker count must be greater than zero",
+				"error"
+			);
 			throw new Error("Worker count must be greater than zero");
 		}
-		log(`[Supervisor] Creating ${count} worker(s) of type ${worker}`,"info");
+		log(
+			`[Supervisor] Creating ${count} worker(s) of type ${worker}`,
+			"info"
+		);
 
 		for (let i = 0; i < count; i++) {
 			const workerPath = path.resolve(
 				__dirname,
 				`./workers/${worker}.ts`
 			);
-			
 
 			const runningWorker = spawn(
 				process.execPath,
@@ -69,7 +80,7 @@ export default class Supervisor {
 				],
 				{
 					stdio: ["inherit", "inherit", "inherit", "ipc"],
-					env: { ...config, },
+					env: { ...config },
 				}
 			);
 
@@ -132,7 +143,7 @@ export default class Supervisor {
 
 	handleWorkerMessage(message: Message, processId: number): void {
 		const { messageId, reason, status, destination } = message;
-		
+
 		destination.forEach((dest) => {
 			if (dest !== "supervisor") {
 				message.destination = destination.filter((d) => d === dest);
@@ -157,7 +168,7 @@ export default class Supervisor {
 					dest.split("/")?.[0]?.split(".")?.[0] ?? "";
 				this.removePendingMessage(workerName, messageId);
 			}
-		})
+		});
 	}
 
 	handleSendMessageWorker(processId: number, message: Message): void {
@@ -173,10 +184,15 @@ export default class Supervisor {
 				`[Supervisor] message received ${messageId} from PID : ${processId}`
 			);
 
-			let availableWorkers = this.workers.filter((worker) =>
-				worker.spawnargs.some((args) => args.includes(workerName))
+			let availableWorkers = this.workers.filter((worker) => {
+				const usSameWorkerName= worker.spawnargs.some((args) => args.includes(workerName)) 
+				const isAlive = this.isWorkerAlive(worker);
+				const isReady = execSync(
+					`ps -o state= -p ${worker.pid}`
+				).toString().trim() === "R";
+				return usSameWorkerName && isAlive && !isReady;
+			}
 			);
-
 			// Track message sebelum dikirim
 			this.trackPendingMessage(workerName, message);
 
@@ -211,7 +227,7 @@ export default class Supervisor {
 
 			if (status === "failed" && reason === "SERVER_BUSY") {
 				availableWorkers = availableWorkers.filter(
-					(worker) => worker.pid !== processId
+					(worker) => worker.pid !== processId 
 				);
 			}
 
@@ -232,6 +248,9 @@ export default class Supervisor {
 
 			const targetWorker = availableWorkers[0];
 			if (this.isWorkerAlive(targetWorker)) {
+				log(
+					`[Supervisor] Sending message ${messageId} to worker: ${workerName} (${targetWorker.pid})`
+				);
 				targetWorker.send(message);
 				log(
 					`[Supervisor] sent message ${messageId} to worker: ${workerName} (${targetWorker.pid})`,
