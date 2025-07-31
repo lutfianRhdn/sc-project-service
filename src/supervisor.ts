@@ -143,17 +143,7 @@ export default class Supervisor {
 				this.handleSendMessageWorker(processId, message);
 				return;
 			}
-			// Bisa tambahkan logic khusus supervisor di sini kalau ada
-			if (status === "healthy") {
-				this.workersHealth[processId] = {
-					isHealthy: true,
-					workerNameId: message.data.instanceId,
-					timestamp: new Timestamp({
-						t: Math.floor(Date.now() / 1000),
-						i: 0,
-					}),
-				};
-			}
+		
 
 			// Jika pesan status "completed", hapus dari pending
 			if (status === "completed" && destination) {

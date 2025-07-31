@@ -185,25 +185,6 @@ describe('Supervisor', () => {
       jest.clearAllMocks();
     });
 
-    it('should handle healthy status message', () => {
-      const message: Message = {
-        messageId: 'msg-1',
-        status: 'healthy',
-        reason: '',
-        destination: ['supervisor'],
-        data: { instanceId: 'worker-1' },
-      };
-
-      supervisor.handleWorkerMessage(message, 12345);
-
-      // Should update worker health
-      expect(supervisor['workersHealth'][12345]).toEqual({
-        isHealthy: true,
-        workerNameId: 'worker-1',
-        timestamp: expect.any(Timestamp),
-      });
-    });
-
     it('should route message to other workers', () => {
       const message: Message = {
         messageId: 'msg-1',
