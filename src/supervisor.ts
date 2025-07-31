@@ -5,8 +5,6 @@ import { Message } from "./utils/handleMessage";
 import { workerConfig } from "./configs/worker";
 import { Timestamp } from "mongodb";
 import { RABBITMQ_URL } from "./configs/env";
-import {tasklist} from "tasklist";
-import psList from "ps-list";
 interface WorkerHealthInterFace {
 	isHealthy: boolean;
 	workerNameId: string;
