@@ -28,24 +28,7 @@ export class RabbitMQWorker implements Worker {
 			);
 		});
 	}
-	healthCheck(): void {
-		setInterval(
-			() =>
-				sendMessagetoSupervisor({
-					messageId: uuidv4(),
-					status: "healthy",
-					data: {
-						instanceId: this.instanceId,
-						timestamp: new Date().toISOString(),
-					},
-				}),
-			10000
-		);
-	}
 
-	public getInstanceId(): string {
-		return this.instanceId;
-	}
 	public async run(): Promise<void> {
 		try {
 			if (!this.string_connection) {
@@ -89,7 +72,6 @@ export class RabbitMQWorker implements Worker {
 					"error"
 				);
 			});
-			this.healthCheck();
 			this.listenTask().catch((error) =>
 				log(
 					`[RabbitMQWorker] Error in linstenTask method: ${error.message}`,
@@ -101,6 +83,7 @@ export class RabbitMQWorker implements Worker {
 				"success"
 			);
 			await this.consumeMessage(this.consumeQueue);
+			await this.consumeMessage(this.consumeCompensationQueue);
 		} catch (error) {
 			log(
 				`[RabbitMQWorker] Failed to run worker: ${error.message}`,
@@ -125,30 +108,48 @@ export class RabbitMQWorker implements Worker {
 		this.consumeChannel.consume(
 			queueName,
 			(msg) => {
+				console.log(msg)
 				if (msg !== null) {
 					const messageContent = msg.content.toString();
+					const messageHeaders = msg.properties.headers;
+					const project_id = messageHeaders.project_id;
+					console.log("Received message:", messageContent);
+					console.log("Queue name:", queueName);
+					console.log("Project ID:", project_id);
 					if (queueName === this.consumeQueue) {
 						sendMessagetoSupervisor({
 							messageId: uuidv4(),
 							status: "completed",
 							data: JSON.parse(messageContent),
-							destination: [],
+							destination: [
+								`DatabaseInteractionWorker/updateStatus/${project_id}`,
+							],
 						});
 					} else if (
 						queueName === this.consumeCompensationQueue
 					) {
-						// sendMessagetoSupervisor({
-						// 	messageId: uuidv4(),
-						// 	status: "error",
-						// 	reason: "ROLLBACK",
-						// 	data: JSON.parse(messageContent),
-						// 	destination: "DatabaseInteractionWorker",
-						// });
+						sendMessagetoSupervisor({
+							messageId: uuidv4(),
+							status: "completed",
+							data: JSON.parse(messageContent),
+							destination: ["DatabaseInteractionWorker/removeProject/"],
+						});
 					}
 				}
 			},
 			{ noAck: true }
-		);
+		).then(() => {
+			log(
+				`[RabbitMQWorker] Successfully started consuming from queue: ${queueName}`,
+				"success"
+			);
+		}).catch((error) => {
+			log(
+				`[RabbitMQWorker] Error consuming from queue ${queueName}: ${error.message}`,
+				"error"
+			);
+			throw error;
+		})
 	}
 	public async produceMessage(
 		data: any,

@@ -2,63 +2,39 @@ import log from "./utils/log";
 import { ChildProcess, spawn,execSync } from "child_process";
 import path from "path";
 import { Message } from "./utils/handleMessage";
-import { workerConfig } from "./configs/worker";
+import { DatabaseInteractionWorker, RabbitMQWorker, RestApiWorker, allConfigs } from "./configs/worker";
 import { Timestamp } from "mongodb";
 import { RABBITMQ_URL } from "./configs/env";
-interface WorkerHealthInterFace {
-	isHealthy: boolean;
-	workerNameId: string;
-	timestamp: Timestamp;
-}
 
 interface CreateWorkerOptions {
 	worker: string;
 	count: number;
 	config: any;
-	cpu: any;
-	memory: any;
 }
 
 type PendingMessage = Message & { timestamp: number };
 
 export default class Supervisor {
 	private workers: ChildProcess[] = [];
-	private workersHealth: Record<number, WorkerHealthInterFace> = {};
 	private pendingMessages: Record<string, PendingMessage[]> = {};
 
 	constructor() {
 		this.createWorker({
-			worker: "RestAPIWorker",
-			count: 1,
-			config: {},
-			cpu: 1,
-			memory: 1024
+			worker: "RestApiWorker",
+			count: RestApiWorker.count,
+			config: RestApiWorker.config,
 		});
 		this.createWorker({
 			worker: "DatabaseInteractionWorker",
-			count: 1,
-			config: {
-
-			},
-			cpu: 1,
-			memory: 1024,
+			count: DatabaseInteractionWorker.count,
+			config: DatabaseInteractionWorker.config,
 		});
 
 		this.createWorker({
 			worker: "RabbitMQWorker",
-			count: 1,
-			config: {
-				consumeQueue: "projectQueue",
-				consumeCompensationQueue: "projectCompensationQueueue",
-				produceQueue: "dataGatheringQueue",
-				produceCompensationQueue:
-					"dataGatheringCompensationQueueue",
-				rabbitMqUrl: RABBITMQ_URL,
-			},
-			cpu: 1,
-			memory: 1024,
+			count: RabbitMQWorker.count,
+			config: RabbitMQWorker.config,
 		});
-		// setInterval(() => this.checkWorkerHealth(), 10000); // Check worker health every 10 seconds
 		log("[Supervisor] Supervisor initialized");
 	}
 
@@ -66,8 +42,6 @@ export default class Supervisor {
 		worker,
 		count,
 		config,
-		cpu,
-		memory,
 	}: CreateWorkerOptions): void {
 		if (count <= 0) {
 			log(
@@ -111,7 +85,7 @@ export default class Supervisor {
 					`[Supervisor] Worker exited. PID: ${runningWorker.pid}`,
 					"warn"
 				);
-				this.createWorker({worker:worker, count:1, config, cpu, memory});
+				this.createWorker({worker:worker, count:count, config});
 			});
 
 			runningWorker.on("message", (message: any) =>
@@ -205,7 +179,7 @@ export default class Supervisor {
 				);
 				this.createWorker({
 					worker: workerName,
-					...workerConfig[workerName],
+					...allConfigs[workerName],
 				});
 				return;
 			}
@@ -267,7 +241,7 @@ export default class Supervisor {
 		worker.kill();
 		this.createWorker({
 			worker: workerName,
-			...workerConfig[workerName],
+			...allConfigs[workerName],
 		});
 
 		// Setelah worker baru dibuat, resend semua message pending untuk worker ini
