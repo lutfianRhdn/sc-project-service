@@ -6,8 +6,8 @@ export const DatabaseInteractionWorker = {
 		db_url: env.DATABASE_URL || "mongodb://localhost:27017",
 		db_name: env.DATABASE_NAME || "project",
 		collection_name: env.DATABASE_COLLECTION_NAME || "projects",
-	}
-}
+	},
+};
 export const RestApiWorker= {
 		count: 1,
 		config: {

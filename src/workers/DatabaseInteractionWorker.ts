@@ -23,30 +23,13 @@ export default class DatabaseInteractionWorker implements Worker {
 			);
 		});
 	}
-	healthCheck(): void {
-		setInterval(
-			() =>
-				sendMessagetoSupervisor({
-					messageId: uuidv4(),
-					status: "healthy",
-					data: {
-						instanceId: this.instanceId,
-						timestamp: new Date().toISOString(),
-					},
-				}),
-			10000
-		);
-	}
-	public getInstanceId(): string {
-		return this.instanceId;
-	}
 	public async run(): Promise<void> {
 		try {
 			this.client
 				.connect()
 				.then(() =>
 					log(
-						"[DatabaseInteractionWorker] Connected to MongoDB",
+						`[DatabaseInteractionWorker] Connected to MongoDB ${process.env.db_name}`,
 						"success"
 					)
 				)
@@ -62,7 +45,6 @@ export default class DatabaseInteractionWorker implements Worker {
 					"error"
 				);
 			});
-			this.healthCheck();
 		} catch (error) {
 			console.error(
 				`[DatabaseInteractionWorker] Error in run method: ${error.message}`
