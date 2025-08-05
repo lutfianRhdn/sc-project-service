@@ -12,7 +12,12 @@ export const RestApiWorker= {
 		count: 1,
 		config: {
 			port: env.PORT as number ||4000,
-			jwt_secret: env.JWT_SECRET || 'secret'
+			jwt_secret: env.JWT_SECRET || 'secret',
+				REDIS_USERNAME:env.REDIS_USERNAME || "default",
+		 REDIS_PASSWORD:env.REDIS_PASSWORD || "default",
+		
+			 REDIS_URL: env.REDIS_URL || "localhost",
+			 REIDS_PORT: env.REIDS_PORT
 		},
 	}
 export const RabbitMQWorker= {
