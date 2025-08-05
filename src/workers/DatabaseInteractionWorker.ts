@@ -276,8 +276,12 @@ export default class DatabaseInteractionWorker implements Worker {
 			return {
 				data: {
 					...project,
-					start_date_crawl: data.start_date_crawl,
-					end_date_crawl: data.end_date_crawl,
+					start_date_crawl: new Date(
+						data.start_date_crawl
+					).toLocaleDateString(),
+					end_date_crawl: new Date(
+						data.end_date_crawl
+					).toLocaleDateString(),
 				},
 				destination: [
 					`RestApiWorker/onProcessedMessage/`,
