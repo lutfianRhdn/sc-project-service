@@ -4,7 +4,14 @@ export default class Idempotent {
   private prefixKey: string = "IDEMPONTENT_";
   constructor() {
     this.redisInstance = createClient({
-      url: process.env.REDIS_URL || 'redis://localhost:6379'
+		username: process.env.REDIS_USERNAME || "default",
+		password: process.env.REDIS_PASSWORD || "default",
+		socket: {
+			host: process.env.REDIS_URL || "localhost",
+			port: process.env.REIDS_PORT
+				? parseInt(process.env.REIDS_PORT)
+				: 6379,
+		},
     });
     this.redisInstance.connect().catch((error) => {
       console.error(`[Idempotent] Error connecting to Redis: ${error.message}`);
