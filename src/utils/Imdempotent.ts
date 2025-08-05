@@ -3,6 +3,7 @@ export default class Idempotent {
   private redisInstance: ReturnType<typeof createClient>;
   private prefixKey: string = "IDEMPONTENT_";
   constructor() {
+	  console.log(process.env)
     this.redisInstance = createClient({
 		username: process.env.REDIS_USERNAME || "default",
 		password: process.env.REDIS_PASSWORD || "default",
@@ -14,6 +15,7 @@ export default class Idempotent {
 		},
     });
     this.redisInstance.connect().catch((error) => {
+      console.log(error)
       console.error(`[Idempotent] Error connecting to Redis: ${error.message}`);
     });
   }
