@@ -278,10 +278,10 @@ export default class DatabaseInteractionWorker implements Worker {
 					...project,
 					start_date_crawl: new Date(
 						data.start_date_crawl
-					).toLocaleDateString(),
+					).toISOString().split("T")[0],
 					end_date_crawl: new Date(
 						data.end_date_crawl
-					).toLocaleDateString(),
+					).toISOString().split("T")[0],
 				},
 				destination: [
 					`RestApiWorker/onProcessedMessage/`,
