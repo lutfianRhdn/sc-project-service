@@ -274,7 +274,11 @@ export default class DatabaseInteractionWorker implements Worker {
 			});
 			project.tweetToken = tweetToken;
 			return {
-				data: project,
+				data: {
+					...project,
+					start_date_crawl: data.start_date_crawl,
+					end_date_crawl: data.end_date_crawl,
+				},
 				destination: [
 					`RestApiWorker/onProcessedMessage/`,
 					`RabbitMQWorker/produceMessage`,
