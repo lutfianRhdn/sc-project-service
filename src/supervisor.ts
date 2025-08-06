@@ -30,11 +30,11 @@ export default class Supervisor {
 			config: DatabaseInteractionWorker.config,
 		});
 
-		this.createWorker({
-			worker: "RabbitMQWorker",
-			count: RabbitMQWorker.count,
-			config: RabbitMQWorker.config,
-		});
+		// this.createWorker({
+		// 	worker: "RabbitMQWorker",
+		// 	count: RabbitMQWorker.count,
+		// 	config: RabbitMQWorker.config,
+		// });
 
 		this.createWorker({
 			worker: "GraphQLWorker",

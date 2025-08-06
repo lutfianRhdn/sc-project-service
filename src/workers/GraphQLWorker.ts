@@ -192,6 +192,7 @@ export class GraphQLWorker implements Worker {
 		// Apollo Server
 		this.server = new ApolloServer({
 			schema,
+			
 		});
 
 		const { url } = await startStandaloneServer(this.server, {
