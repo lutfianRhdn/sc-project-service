@@ -196,7 +196,7 @@ export class GraphQLWorker implements Worker {
 		});
 
 		const { url } = await startStandaloneServer(this.server, {
-			listen: { port: Number(process.env.graphql_port) || 4001 },
+			listen: { host:"0.0.0.0",port: Number(process.env.graphql_port) || 4001 },
 			context: async ({ req }) => {
 				return {
 					authorization: req.headers.authorization,
