@@ -158,6 +158,59 @@ export default class DatabaseInteractionWorker implements Worker {
 			return [];
 		}
 	}
+
+	public async getAllDataPaginated({ data }): Promise<any> {
+		try {
+			const { userId, page = 1, limit = 10, name } = data;
+			const skip = (page - 1) * limit;
+
+			// Build query
+			let query: any = { userId };
+			if (name) {
+				query.title = { $regex: name, $options: 'i' };
+			}
+
+			// Get total count
+			const total = await this.collection.countDocuments(query);
+
+			// Get paginated data
+			const projects = await this.collection
+				.find(query)
+				.skip(skip)
+				.limit(limit)
+				.sort({ createdAt: -1 })
+				.toArray();
+
+			log(
+				`[DatabaseInteractionWorker] Successfully retrieved ${projects.length} of ${total} documents for page ${page}`,
+				"success"
+			);
+
+			return {
+				data: {
+					projects,
+					total,
+					page,
+					limit,
+				},
+				destination: [`GraphQLWorker/onProcessedMessage`],
+			};
+		} catch (error) {
+			log(
+				`[DatabaseInteractionWorker] Error retrieving paginated data: ${error.message}`,
+				"error"
+			);
+			return {
+				data: {
+					projects: [],
+					total: 0,
+					page: 1,
+					limit: 10,
+				},
+				destination: [`GraphQLWorker/onProcessedMessage`],
+			};
+		}
+	}
 	public async getDataById({ id }): Promise<any> {
 		try {
 			const data = await this.collection.findOne({
@@ -179,7 +232,7 @@ export default class DatabaseInteractionWorker implements Worker {
 			);
 			return {
 				data,
-				destination: [`RestApiWorker/onProcessedMessage`],
+				destination: [`RestApiWorker/onProcessedMessage`, `GraphQLWorker/onProcessedMessage`],
 			};
 		} catch (error) {
 			log(
@@ -267,6 +320,12 @@ export default class DatabaseInteractionWorker implements Worker {
 				...data,
 				start_date_crawl: new Date(data.start_date_crawl),
 				end_date_crawl: new Date(data.end_date_crawl),
+				project_status: {
+					topic_modelling: false,
+					sentiment: false,
+					emotion: false,
+					sna: false,
+				},
 				createdAt: new Date(),
 			});
 			const project = await this.collection.findOne({
@@ -285,6 +344,7 @@ export default class DatabaseInteractionWorker implements Worker {
 				},
 				destination: [
 					`RestApiWorker/onProcessedMessage/`,
+					`GraphQLWorker/onProcessedMessage/`,
 					`RabbitMQWorker/produceMessage`,
 				],
 			};

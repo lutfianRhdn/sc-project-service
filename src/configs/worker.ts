@@ -29,10 +29,19 @@ export const RabbitMQWorker= {
       rabbitMqUrl:env.RABBITMQ_URL || "amqp://localhost:5672",
 		},
 }
+
+export const GraphQLWorker = {
+	count: 1,
+	config: {
+		graphql_port: env.GRAPHQL_PORT || 4001,
+		jwt_secret: env.JWT_SECRET || 'secret',
+	},
+}
 	
 
 export const allConfigs = {
 	DatabaseInteractionWorker,
 	RestApiWorker,
 	RabbitMQWorker,
+	GraphQLWorker,
 };

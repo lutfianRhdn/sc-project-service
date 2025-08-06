@@ -2,7 +2,7 @@ import log from "./utils/log";
 import { ChildProcess, spawn,execSync } from "child_process";
 import path from "path";
 import { Message } from "./utils/handleMessage";
-import { DatabaseInteractionWorker, RabbitMQWorker, RestApiWorker, allConfigs } from "./configs/worker";
+import { DatabaseInteractionWorker, RabbitMQWorker, RestApiWorker, GraphQLWorker, allConfigs } from "./configs/worker";
 import { Timestamp } from "mongodb";
 import { RABBITMQ_URL } from "./configs/env";
 
@@ -30,10 +30,16 @@ export default class Supervisor {
 			config: DatabaseInteractionWorker.config,
 		});
 
+		// this.createWorker({
+		// 	worker: "RabbitMQWorker",
+		// 	count: RabbitMQWorker.count,
+		// 	config: RabbitMQWorker.config,
+		// });
+
 		this.createWorker({
-			worker: "RabbitMQWorker",
-			count: RabbitMQWorker.count,
-			config: RabbitMQWorker.config,
+			worker: "GraphQLWorker",
+			count: GraphQLWorker.count,
+			config: GraphQLWorker.config,
 		});
 		log("[Supervisor] Supervisor initialized");
 	}
