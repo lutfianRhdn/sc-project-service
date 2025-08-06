@@ -5,6 +5,7 @@ config();
 
 export const {
 	PORT,
+	GRAPHQL_PORT,
 	JWT_SECRET,
 	DATABASE_URL,
 	DATABASE_NAME,
@@ -19,6 +20,7 @@ export const {
 	REDIS_PASSWORD,
 } = parseEnv(process.env, {
 	PORT: z.coerce.number().default(4000),
+	GRAPHQL_PORT: z.coerce.number().default(4001),
 	JWT_SECRET: z.string().min(1).default("supersecretkey"),
 
 	DATABASE_URL: z.string().min(1),
