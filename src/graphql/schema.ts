@@ -1,14 +1,16 @@
 export const typeDefs = `#graphql
+  extend schema @link(url: "https://specs.apollo.dev/federation/v2.0", import: ["@key", "@shareable"])
+
   scalar DateTime
 
-  type ProjectStatus {
+  type ProjectStatus @shareable {
     topic_modelling: Boolean!
     sentiment: Boolean!
     emotion: Boolean!
     sna: Boolean!
   }
 
-  type Project {
+  type Project @key(fields: "_id") {
     _id: ID!
     title: String!
     description: String!

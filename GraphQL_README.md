@@ -1,30 +1,41 @@
-# GraphQL Worker Implementation
+# GraphQL Federation Worker Implementation
 
-This document describes the new GraphQL Worker implementation that provides a GraphQL API alongside the existing REST API.
+This document describes the GraphQL Federation Worker implementation that provides a GraphQL Federation subgraph alongside the existing REST API.
 
 ## Overview
 
-The GraphQL Worker follows the same microservices pattern as other workers in the system:
+The GraphQL Federation Worker follows the same microservices pattern as other workers in the system and now operates as a **GraphQL Federation subgraph**:
 - Runs as a separate process managed by the Supervisor
 - Communicates with DatabaseInteractionWorker for all database operations
 - Provides JWT authentication compatibility with the REST API
 - Runs on a configurable port (default: 4001)
+- **NEW**: Functions as a GraphQL Federation subgraph that can be composed into a federated graph
+
+## Federation Architecture
+
+The service now implements GraphQL Federation v2.0 specification:
+- Uses `@apollo/subgraph` to build federated schema
+- Includes federation directives (`@key`, `@shareable`, etc.)
+- Supports entity resolution for distributed queries
+- Can be composed with other subgraphs using Apollo Gateway or Router
 
 ## Schema
 
-The GraphQL schema implements the exact specification provided:
+The GraphQL schema implements federation directives and the exact specification provided:
 
 ```graphql
+extend schema @link(url: "https://specs.apollo.dev/federation/v2.0", import: ["@key", "@shareable"])
+
 scalar DateTime
 
-type ProjectStatus {
+type ProjectStatus @shareable {
   topic_modelling: Boolean!
   sentiment: Boolean!
   emotion: Boolean!
   sna: Boolean!
 }
 
-type Project {
+type Project @key(fields: "_id") {
   _id: ID!
   title: String!
   description: String!
@@ -68,6 +79,21 @@ type Subscription {
   subsProjectById(id: String!): Project!
 }
 ```
+
+## Federation Features
+
+### Entity Support
+- **Project** type is marked as an entity with `@key(fields: "_id")`
+- Supports entity resolution for distributed queries across subgraphs
+- Other subgraphs can extend the Project type with additional fields
+
+### Shareable Types
+- **ProjectStatus** type is marked as `@shareable`
+- Multiple subgraphs can define the same shareable type
+
+### Entity Resolution
+- Implements `__resolveReference` resolver for Project entities
+- Allows federation gateway to resolve Project references from other subgraphs
 
 ## Usage Examples
 
@@ -186,24 +212,57 @@ Content-Type: application/json
 Add these environment variables to your `.env` file:
 
 ```env
-GRAPHQL_PORT=4001  # Port for GraphQL server (optional, defaults to 4001)
+GRAPHQL_PORT=4001  # Port for GraphQL Federation subgraph (optional, defaults to 4001)
 JWT_SECRET=your-secret-key  # Same JWT secret used by REST API
+```
+
+## Federation Gateway Setup
+
+To use this subgraph in a federated architecture, you need an Apollo Gateway or Router:
+
+### Apollo Gateway Example
+```javascript
+const { ApolloGateway } = require('@apollo/gateway');
+const { ApolloServer } = require('@apollo/server');
+
+const gateway = new ApolloGateway({
+  serviceList: [
+    { name: 'projects', url: 'http://localhost:4001/graphql' },
+    // Add other subgraphs here
+  ],
+});
+
+const server = new ApolloServer({
+  gateway,
+  subscriptions: false,
+});
+```
+
+### Apollo Router Config (router.yaml)
+```yaml
+endpoints:
+  - url: http://localhost:4001/graphql
+    subgraph: projects
 ```
 
 ## Architecture
 
 ```
-GraphQL Request → GraphQLWorker → Supervisor → DatabaseInteractionWorker → MongoDB
-                      ↓
-                JWT Authentication
-                      ↓
-                Message Queue System
-                      ↓
-                Response via Event Emitter
+Federation Gateway/Router
+        ↓
+GraphQL Federation Subgraph → Supervisor → DatabaseInteractionWorker → MongoDB
+        ↓
+  JWT Authentication
+        ↓
+  Message Queue System
+        ↓
+  Response via Event Emitter
 ```
 
 ## Features Implemented
 
+✅ **Federation v2.0**: Built with Apollo Federation v2.0 specification
+✅ **Entity Support**: Project type can be referenced and extended by other subgraphs
 ✅ **Authentication**: JWT token validation (same as REST API)
 ✅ **Pagination**: Support for page/limit parameters in getAllProjects
 ✅ **Search**: Support for name parameter to filter projects by title
@@ -211,6 +270,7 @@ GraphQL Request → GraphQLWorker → Supervisor → DatabaseInteractionWorker �
 ✅ **DateTime Handling**: Custom scalar for proper date serialization
 ✅ **Error Handling**: Proper GraphQL error responses
 ✅ **Integration**: Seamless communication with existing database worker
+✅ **Shareable Types**: ProjectStatus type marked as shareable for composition
 
 ## Testing
 
@@ -236,6 +296,34 @@ npm test -- GraphQLWorker.test.ts
 
 ## Server Information
 
-- **GraphQL Endpoint**: `http://localhost:4001/graphql`
-- **GraphQL Playground**: Available in development mode at the same endpoint
+- **GraphQL Federation Subgraph Endpoint**: `http://localhost:4001/graphql`
+- **Federation SDL**: Available at the endpoint for schema composition
 - **Health Check**: Worker sends health checks every 10 seconds to supervisor
+- **Introspection**: Available in development mode
+
+## Federation Benefits
+
+1. **Distributed Architecture**: Each domain can have its own subgraph
+2. **Schema Composition**: Multiple teams can work on different parts of the schema
+3. **Entity Resolution**: Projects can be referenced and extended across subgraphs
+4. **Type Sharing**: Shareable types can be reused across the federation
+5. **Independent Deployment**: Subgraphs can be deployed independently
+
+## Migration from Standalone GraphQL
+
+The migration to federation maintains backward compatibility:
+- All existing queries, mutations work exactly the same
+- Authentication remains unchanged
+- API endpoints and functionality preserved
+- Added federation capabilities for future expansion
+
+## Testing Federation
+
+```bash
+npm test -- --testPathPatterns=GraphQLFederation
+```
+
+This runs federation-specific tests that validate:
+- Schema builds correctly with federation directives
+- Entity resolvers work properly
+- Federation composition compatibility
