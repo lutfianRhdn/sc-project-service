@@ -207,4 +207,4 @@ export class GraphQLWorker implements Worker {
 	}
 }
 
-const worker = new GraphQLWorker();
+new GraphQLWorker();
