@@ -134,4 +134,20 @@ export const createResolvers = (workerInstance: GraphQLWorkerInstance) => ({
       },
     },
   },
+
+  // Federation entity resolver for Project
+  Project: {
+    __resolveReference: async (project: { _id: string }) => {
+      // This resolver allows the federation gateway to resolve Project entities by their key field (_id)
+      const result = await workerInstance.sendMessageToOtherWorker({}, [
+        `DatabaseInteractionWorker/getDataById/${project._id}`,
+      ]);
+
+      if (!result) {
+        return null;
+      }
+
+      return result;
+    },
+  },
 });
