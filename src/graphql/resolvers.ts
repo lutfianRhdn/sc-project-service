@@ -35,6 +35,21 @@ export interface GraphQLWorkerInstance {
 export const createResolvers = (workerInstance: GraphQLWorkerInstance) => ({
   DateTime: DateTimeType,
 
+  Project: {
+    __resolveReference: async (reference: { _id: string }) => {
+      // This resolver is called when another subgraph needs to resolve a Project by its key
+      const result = await workerInstance.sendMessageToOtherWorker({}, [
+        `DatabaseInteractionWorker/getDataById/${reference._id}`,
+      ]);
+
+      if (!result) {
+        return null;
+      }
+
+      return result;
+    },
+  },
+
   Query: {
     getAllProjects: async (
       _: any,
