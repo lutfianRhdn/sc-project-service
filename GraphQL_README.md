@@ -1,20 +1,38 @@
-# GraphQL Worker Implementation
+# GraphQL Federation 2 Subgraph Implementation
 
-This document describes the new GraphQL Worker implementation that provides a GraphQL API alongside the existing REST API.
+This document describes the GraphQL Federation 2 Subgraph implementation that provides a federated GraphQL API alongside the existing REST API.
 
 ## Overview
 
-The GraphQL Worker follows the same microservices pattern as other workers in the system:
-- Runs as a separate process managed by the Supervisor
+The GraphQL Worker has been updated to work as an Apollo Federation 2 subgraph:
+- Runs as a federated subgraph that can be composed with other services
+- Uses Apollo Federation 2 specifications with `@key` directives
+- Provides entity resolution for the `Project` type
 - Communicates with DatabaseInteractionWorker for all database operations
 - Provides JWT authentication compatibility with the REST API
 - Runs on a configurable port (default: 4001)
 
+## Federation Features
+
+The subgraph implements the following federation features:
+
+### Entity Resolution
+- `Project` type is marked as an entity with `@key(fields: "_id")`
+- Includes `__resolveReference` resolver for external entity resolution
+- Supports composition with other subgraphs in a federated gateway
+
+### Schema Directives
+- Uses Federation 2.0 specification
+- Imports `@key` and `@shareable` directives
+- Properly extends schema for federation composition
+
 ## Schema
 
-The GraphQL schema implements the exact specification provided:
+The GraphQL schema implements Apollo Federation 2 as a subgraph:
 
 ```graphql
+extend schema @link(url: "https://specs.apollo.dev/federation/v2.0", import: ["@key", "@shareable"])
+
 scalar DateTime
 
 type ProjectStatus {
@@ -24,7 +42,7 @@ type ProjectStatus {
   sna: Boolean!
 }
 
-type Project {
+type Project @key(fields: "_id") {
   _id: ID!
   title: String!
   description: String!
@@ -186,24 +204,42 @@ Content-Type: application/json
 Add these environment variables to your `.env` file:
 
 ```env
-GRAPHQL_PORT=4001  # Port for GraphQL server (optional, defaults to 4001)
+GRAPHQL_PORT=4001  # Port for GraphQL subgraph server (optional, defaults to 4001)
 JWT_SECRET=your-secret-key  # Same JWT secret used by REST API
+```
+
+## Federation Gateway Setup
+
+To use this subgraph in a federated gateway, include it in your gateway configuration:
+
+```javascript
+const gateway = new ApolloGateway({
+  supergraphSdl: new IntrospectAndCompose({
+    subgraphs: [
+      { name: 'projects', url: 'http://localhost:4001/graphql' },
+      // ... other subgraphs
+    ],
+  }),
+});
 ```
 
 ## Architecture
 
 ```
-GraphQL Request → GraphQLWorker → Supervisor → DatabaseInteractionWorker → MongoDB
-                      ↓
-                JWT Authentication
-                      ↓
-                Message Queue System
-                      ↓
-                Response via Event Emitter
+Federation Gateway → GraphQL Subgraph (Project Service) → Supervisor → DatabaseInteractionWorker → MongoDB
+                                ↓
+                       JWT Authentication
+                                ↓
+                       Message Queue System
+                                ↓
+                       Response via Event Emitter
 ```
 
 ## Features Implemented
 
+✅ **Federation 2.0**: Apollo Federation 2 subgraph with entity resolution
+✅ **Entity Resolution**: `Project` entity with `@key(fields: "_id")` directive  
+✅ **Reference Resolvers**: Support for external entity resolution
 ✅ **Authentication**: JWT token validation (same as REST API)
 ✅ **Pagination**: Support for page/limit parameters in getAllProjects
 ✅ **Search**: Support for name parameter to filter projects by title
@@ -236,6 +272,7 @@ npm test -- GraphQLWorker.test.ts
 
 ## Server Information
 
-- **GraphQL Endpoint**: `http://localhost:4001/graphql`
+- **GraphQL Subgraph Endpoint**: `http://localhost:4001/graphql`
 - **GraphQL Playground**: Available in development mode at the same endpoint
+- **Federation SDL**: Available at the endpoint for gateway introspection
 - **Health Check**: Worker sends health checks every 10 seconds to supervisor

@@ -4,7 +4,8 @@ import log from "../utils/log";
 import express, { Express } from "express";
 import { ApolloServer } from '@apollo/server';
 import { startStandaloneServer } from '@apollo/server/standalone';
-import { makeExecutableSchema } from '@graphql-tools/schema';
+import { buildSubgraphSchema } from '@apollo/subgraph';
+import { gql } from 'graphql-tag';
 import * as jwt from "jsonwebtoken";
 import EventEmitter from "events";
 
@@ -184,8 +185,8 @@ export class GraphQLWorker implements Worker {
 
 	async startGraphQLServer(): Promise<void> {
 		// Create GraphQL schema
-		const schema = makeExecutableSchema({
-			typeDefs,
+		const schema = buildSubgraphSchema({
+			typeDefs: gql(typeDefs),
 			resolvers: createResolvers(this),
 		});
 
@@ -204,7 +205,7 @@ export class GraphQLWorker implements Worker {
 			},
 		});
 
-		log(`[GraphQLWorker] GraphQL server running at ${url}`, "info");
+		log(`[GraphQLWorker] GraphQL federation subgraph running at ${url}`, "info");
 	}
 }
 

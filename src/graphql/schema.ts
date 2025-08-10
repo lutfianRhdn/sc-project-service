@@ -1,4 +1,6 @@
 export const typeDefs = `#graphql
+  extend schema @link(url: "https://specs.apollo.dev/federation/v2.0", import: ["@key", "@shareable"])
+
   scalar DateTime
 
   type ProjectStatus {
@@ -8,7 +10,7 @@ export const typeDefs = `#graphql
     sna: Boolean!
   }
 
-  type Project {
+  type Project @key(fields: "_id") {
     _id: ID!
     title: String!
     description: String!
