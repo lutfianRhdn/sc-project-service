@@ -8,6 +8,7 @@ export const typeDefs = `#graphql
     sentiment: Boolean!
     emotion: Boolean!
     sna: Boolean!
+    chatbot: Boolean!
   }
 
   type Project @key(fields: "_id") {
