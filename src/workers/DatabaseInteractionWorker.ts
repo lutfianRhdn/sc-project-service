@@ -325,6 +325,7 @@ export default class DatabaseInteractionWorker implements Worker {
 					sentiment: false,
 					emotion: false,
 					sna: false,
+					chatbot:false
 				},
 				createdAt: new Date(),
 			});
