@@ -112,7 +112,7 @@ export default class DatabaseInteractionWorker implements Worker {
 				);
 				return {
 					data: null,
-					destination: [`RestApiWorker/onProcessedMessage`],
+					destination: [`GraphQLWorker/onProcessedMessage`],
 				};
 			}
 			log(
@@ -124,7 +124,7 @@ export default class DatabaseInteractionWorker implements Worker {
 			});
 			return {
 				data: updatedData,
-				destination: [`RestApiWorker/onProcessedMessage`],
+				destination: [`GraphQLWorker/onProcessedMessage`],
 			};
 		} catch (error) {
 			log(
@@ -133,7 +133,7 @@ export default class DatabaseInteractionWorker implements Worker {
 			);
 			return {
 				data: null,
-				destination: [`RestApiWorker/onProcessedMessage`],
+				destination: [`GraphQLWorker/onProcessedMessage`],
 			};
 		}
 	}
@@ -148,7 +148,7 @@ export default class DatabaseInteractionWorker implements Worker {
 			);
 			return {
 				data,
-				destination: [`RestApiWorker/onProcessedMessage`],
+				destination: [`GraphQLWorker/onProcessedMessage`],
 			};
 		} catch (error) {
 			log(
@@ -223,7 +223,7 @@ export default class DatabaseInteractionWorker implements Worker {
 				);
 				return {
 					data: null,
-					destination: [`RestApiWorker/onProcessedMessage`],
+					destination: [`GraphQLWorker/onProcessedMessage`],
 				};
 			}
 			log(
@@ -232,7 +232,7 @@ export default class DatabaseInteractionWorker implements Worker {
 			);
 			return {
 				data,
-				destination: [`RestApiWorker/onProcessedMessage`, `GraphQLWorker/onProcessedMessage`],
+				destination: [`GraphQLWorker/onProcessedMessage`, `GraphQLWorker/onProcessedMessage`],
 			};
 		} catch (error) {
 			log(
@@ -241,7 +241,7 @@ export default class DatabaseInteractionWorker implements Worker {
 			);
 			return {
 				data: null,
-				destination: [`RestApiWorker/onProcessedMessage`],
+				destination: [`GraphQLWorker/onProcessedMessage`],
 			};
 		}
 	}
@@ -256,13 +256,13 @@ export default class DatabaseInteractionWorker implements Worker {
 					log(`[DatabaseInteractionWorker] No project found with ID: ${projectId}`,"warn");
 					resolve({
 						data: null,
-						destination: [`RestApiWorker/onProcessedMessage`],
+						destination: [`GraphQLWorker/onProcessedMessage`],
 					});
 				} else {
 					log(`[DatabaseInteractionWorker] Successfully deleted project with ID: ${projectId}`,"success");
 					resolve({
 						data: { id: projectId },
-						destination: [`RestApiWorker/onProcessedMessage`],
+						destination: [`GraphQLWorker/onProcessedMessage`],
 					});
 				}
 			} catch (error) {
@@ -293,7 +293,7 @@ export default class DatabaseInteractionWorker implements Worker {
 				);
 				resolve({
 					data,
-					destination: [`RestApiWorker/onProcessedMessage`],
+					destination: [`GraphQLWorker/onProcessedMessage`],
 				});
 			} catch (error) {
 				log(
@@ -344,7 +344,6 @@ export default class DatabaseInteractionWorker implements Worker {
 					).toISOString().split("T")[0],
 				},
 				destination: [
-					`RestApiWorker/onProcessedMessage/`,
 					`GraphQLWorker/onProcessedMessage/`,
 					`RabbitMQWorker/produceMessage`,
 				],
