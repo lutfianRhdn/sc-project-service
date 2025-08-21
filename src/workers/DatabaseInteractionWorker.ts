@@ -97,13 +97,20 @@ export default class DatabaseInteractionWorker implements Worker {
 	}
 	public async updateStatus({ id, data }): Promise<any> {
 		try {
-			const isExists = await this.collection.findOne({
-				_id: new mongoDB.ObjectId(id),
-			});
-				
-			const result = await this.collection.updateOne(
+			const result = await this.collection.findOneAndUpdate(
 				{ _id: new mongoDB.ObjectId(id) },
-				{ $set: {project_status:{...isExists.project_status, ...data}} }
+				[{$set: {
+					project_status: {
+						$mergeObjects: [{
+							$ifNull: ["$project_status",{},],
+						},
+						data,
+					]}},
+				}],
+				{
+					returnDocument: "after", // Return updated document
+					upsert: false,
+				}
 			);
 			if (result.modifiedCount === 0) {
 				log(
