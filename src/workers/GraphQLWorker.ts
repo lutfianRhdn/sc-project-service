@@ -1,6 +1,7 @@
 import { Worker } from "./Worker";
 import { v4 as uuidv4 } from "uuid";
 import log from "../utils/log";
+import RequestCounter from "../utils/RequestCounter";
 import express, { Express } from "express";
 import { ApolloServer } from '@apollo/server';
 import { startStandaloneServer } from '@apollo/server/standalone';
@@ -28,11 +29,12 @@ export class GraphQLWorker implements Worker {
 	private eventEmitter: EventEmitter = new EventEmitter();
 	private requests: Map<String, RequestType> = new Map();
 	private server: ApolloServer;
+	public requestCounter: RequestCounter;
 
 	constructor() {
 		this.instanceId = `GraphQLWorker-${uuidv4()}`;
+		this.requestCounter = RequestCounter.getInstance();
 		this.run().catch((error) => {
-			console.log(error);
 			log(
 				`[GraphQLWorker] Error in run method: ${error.message}`,
 				"error"
@@ -42,7 +44,7 @@ export class GraphQLWorker implements Worker {
 
 	healthCheck(): void {
 		setInterval(
-			() =>
+			() => {
 				sendMessagetoSupervisor({
 					messageId: uuidv4(),
 					status: "healthy",
@@ -50,7 +52,10 @@ export class GraphQLWorker implements Worker {
 						instanceId: this.instanceId,
 						timestamp: new Date().toISOString(),
 					},
-				}),
+				});
+				// Log request statistics every health check
+				this.requestCounter.logStats();
+			},
 			10000
 		);
 	}
@@ -80,24 +85,36 @@ export class GraphQLWorker implements Worker {
 	async listenTask(): Promise<void> {
 		try {
 			process.on("message", async (message: Message) => {
-				const { messageId, data, status, reason, destination } =
-					message;
-				log(
-					`[GraphQLWorker] Received message: ${messageId}`,
-					"info"
-				);
-				const destinationFiltered = destination.filter((d) =>
-					d.includes("GraphQLWorker")
-				);
-				destinationFiltered.forEach((dest) => {
+				this.requestCounter.incrementTotal();
+				try {
+					const { messageId, data, status, reason, destination } =
+						message;
 					log(
-						`[GraphQLWorker] Processing message for destination: ${dest}`,
+						`[GraphQLWorker] Received message: ${messageId}`,
 						"info"
 					);
-					const destinationSplited = dest.split("/");
-					const path = destinationSplited[1];
-					this[path](message);
-				});
+					const destinationFiltered = destination.filter((d) =>
+						d.includes("GraphQLWorker")
+					);
+					destinationFiltered.forEach((dest) => {
+						log(
+							`[GraphQLWorker] Processing message for destination: ${dest}`,
+							"info"
+						);
+						const destinationSplited = dest.split("/");
+						const path = destinationSplited[1];
+						this[path](message);
+					});
+					
+					this.requestCounter.incrementSuccessful();
+					log(`[GraphQLWorker] Inter-worker message processed successfully: ${messageId}`, "success");
+				} catch (error) {
+					this.requestCounter.incrementFailed();
+					log(
+						`[GraphQLWorker] Error processing inter-worker message: ${error.message}`,
+						"error"
+					);
+				}
 			});
 		} catch (error) {
 			log(
@@ -137,13 +154,10 @@ export class GraphQLWorker implements Worker {
 				process.env.jwt_secret as string,
 				(err, decoded) => {
 					if (err) {
-						log(`[GraphQLWorker] Invalid token`, "warn");
-						console.error(
-							`[GraphQLWorker] Token verification failed: ${err.message}`
-						);
+						log(`[GraphQLWorker] Invalid token: ${err.message}`, "warn");
 						reject(err);
 					}
-					console.log(decoded);
+					log(`[GraphQLWorker] Token decoded successfully`, "info");
 					if (typeof decoded !== "string" && "_id" in decoded) {
 						resolve(decoded._id);
 					}
@@ -159,27 +173,38 @@ export class GraphQLWorker implements Worker {
 	}
 
 	async sendMessageToOtherWorker(data: any, destination: string[]) {
+		this.requestCounter.incrementTotal();
 		return new Promise((resolve, reject) => {
-			const messageId = uuidv4();
-			sendMessagetoSupervisor({
-				messageId,
-				status: "completed",
-				data,
-				destination,
-			});
-			this.eventEmitter.on("message", (message: Message) => {
-				if (message.messageId === messageId) {
-					log(
-						`[GraphQLWorker] Received message for ID: ${messageId}`,
-						"info"
-					);
-					resolve(message.data == null ? {} : message.data);
-					log(
-						`[GraphQLWorker] Response sent for ID: ${messageId}`,
-						"info"
-					);
-				}
-			});
+			try {
+				const messageId = uuidv4();
+				sendMessagetoSupervisor({
+					messageId,
+					status: "completed",
+					data,
+					destination,
+				});
+				this.eventEmitter.on("message", (message: Message) => {
+					if (message.messageId === messageId) {
+						log(
+							`[GraphQLWorker] Received message for ID: ${messageId}`,
+							"info"
+						);
+						this.requestCounter.incrementSuccessful();
+						resolve(message.data == null ? {} : message.data);
+						log(
+							`[GraphQLWorker] Response sent for ID: ${messageId}`,
+							"info"
+						);
+					}
+				});
+			} catch (error) {
+				this.requestCounter.incrementFailed();
+				log(
+					`[GraphQLWorker] Error sending message to other worker: ${error.message}`,
+					"error"
+				);
+				reject(error);
+			}
 		});
 	}
 

@@ -30,6 +30,11 @@ const DateTimeType = new GraphQLScalarType({
 export interface GraphQLWorkerInstance {
   sendMessageToOtherWorker(data: any, destination: string[]): Promise<any>;
   getuserId(authorization: string): Promise<string>;
+  requestCounter: {
+    incrementTotal(): void;
+    incrementSuccessful(): void;
+    incrementFailed(): void;
+  };
 }
 
 export const createResolvers = (workerInstance: GraphQLWorkerInstance) => ({
@@ -38,15 +43,23 @@ export const createResolvers = (workerInstance: GraphQLWorkerInstance) => ({
   Project: {
     __resolveReference: async (reference: { _id: string }) => {
       // This resolver is called when another subgraph needs to resolve a Project by its key
-      const result = await workerInstance.sendMessageToOtherWorker({}, [
-        `DatabaseInteractionWorker/getDataById/${reference._id}`,
-      ]);
+      workerInstance.requestCounter.incrementTotal();
+      try {
+        const result = await workerInstance.sendMessageToOtherWorker({}, [
+          `DatabaseInteractionWorker/getDataById/${reference._id}`,
+        ]);
 
-      if (!result) {
-        return null;
+        if (!result) {
+          workerInstance.requestCounter.incrementFailed();
+          return null;
+        }
+
+        workerInstance.requestCounter.incrementSuccessful();
+        return result;
+      } catch (error) {
+        workerInstance.requestCounter.incrementFailed();
+        throw error;
       }
-
-      return result;
     },
   },
 
@@ -56,34 +69,43 @@ export const createResolvers = (workerInstance: GraphQLWorkerInstance) => ({
       args: { page?: number; limit?: number; name?: string },
       context: { authorization?: string }
     ) => {
-      if (!context.authorization) {
-        throw new Error('Unauthorized');
-      }
+      workerInstance.requestCounter.incrementTotal();
+      try {
+        if (!context.authorization) {
+          workerInstance.requestCounter.incrementFailed();
+          throw new Error('Unauthorized');
+        }
 
-      const userId = await workerInstance.getuserId(context.authorization);
-      const { page = 1, limit = 10, name } = args;
+        const userId = await workerInstance.getuserId(context.authorization);
+        const { page = 1, limit = 10, name } = args;
 
-      // Send message to DatabaseInteractionWorker for paginated results
-      const result = await workerInstance.sendMessageToOtherWorker(
-        { userId, page, limit, name },
-        [`DatabaseInteractionWorker/getAllDataPaginated`]
-      );
+        // Send message to DatabaseInteractionWorker for paginated results
+        const result = await workerInstance.sendMessageToOtherWorker(
+          { userId, page, limit, name },
+          [`DatabaseInteractionWorker/getAllDataPaginated`]
+        );
 
-      if (!result) {
+        if (!result) {
+          workerInstance.requestCounter.incrementSuccessful();
+          return {
+            projects: [],
+            total: 0,
+            page,
+            limit,
+          };
+        }
+
+        workerInstance.requestCounter.incrementSuccessful();
         return {
-          projects: [],
-          total: 0,
+          projects: result.projects || [],
+          total: result.total || 0,
           page,
           limit,
         };
+      } catch (error) {
+        workerInstance.requestCounter.incrementFailed();
+        throw error;
       }
-
-      return {
-        projects: result.projects || [],
-        total: result.total || 0,
-        page,
-        limit,
-      };
     },
 
     getProjectById: async (
@@ -91,15 +113,23 @@ export const createResolvers = (workerInstance: GraphQLWorkerInstance) => ({
       args: { id: string },
       context: { authorization?: string }
     ) => {
-      const result = await workerInstance.sendMessageToOtherWorker({}, [
-        `DatabaseInteractionWorker/getDataById/${args.id}`,
-      ]);
+      workerInstance.requestCounter.incrementTotal();
+      try {
+        const result = await workerInstance.sendMessageToOtherWorker({}, [
+          `DatabaseInteractionWorker/getDataById/${args.id}`,
+        ]);
 
-      if (!result) {
-        throw new Error('Project not found');
+        if (!result) {
+          workerInstance.requestCounter.incrementFailed();
+          throw new Error('Project not found');
+        }
+
+        workerInstance.requestCounter.incrementSuccessful();
+        return result;
+      } catch (error) {
+        workerInstance.requestCounter.incrementFailed();
+        throw error;
       }
-
-      return result;
     },
   },
 
@@ -109,35 +139,44 @@ export const createResolvers = (workerInstance: GraphQLWorkerInstance) => ({
       args: { input: any },
       context: { authorization?: string }
     ) => {
-      if (!context.authorization) {
-        throw new Error('Unauthorized');
+      workerInstance.requestCounter.incrementTotal();
+      try {
+        if (!context.authorization) {
+          workerInstance.requestCounter.incrementFailed();
+          throw new Error('Unauthorized');
+        }
+
+        const userId = await workerInstance.getuserId(context.authorization);
+        const { input } = args;
+
+        const projectData = {
+          title: input.title,
+          description: input.description,
+          keyword: input.keyword,
+          language: input.language,
+          tweetToken: input.tweetToken,
+          topic_category: input.category,
+          start_date_crawl: new Date(input.start_date_crawl),
+          end_date_crawl: new Date(input.end_date_crawl),
+          userId: userId as string,
+        };
+
+        const result = await workerInstance.sendMessageToOtherWorker(
+          projectData,
+          [`DatabaseInteractionWorker/createNewData`]
+        );
+
+        if (!result) {
+          workerInstance.requestCounter.incrementFailed();
+          throw new Error('Failed to create project');
+        }
+
+        workerInstance.requestCounter.incrementSuccessful();
+        return result;
+      } catch (error) {
+        workerInstance.requestCounter.incrementFailed();
+        throw error;
       }
-
-      const userId = await workerInstance.getuserId(context.authorization);
-      const { input } = args;
-
-      const projectData = {
-        title: input.title,
-        description: input.description,
-        keyword: input.keyword,
-        language: input.language,
-        tweetToken: input.tweetToken,
-        topic_category: input.category,
-        start_date_crawl: new Date(input.start_date_crawl),
-        end_date_crawl: new Date(input.end_date_crawl),
-        userId: userId as string,
-      };
-
-      const result = await workerInstance.sendMessageToOtherWorker(
-        projectData,
-        [`DatabaseInteractionWorker/createNewData`]
-      );
-
-      if (!result) {
-        throw new Error('Failed to create project');
-      }
-
-      return result;
     },
   },
 

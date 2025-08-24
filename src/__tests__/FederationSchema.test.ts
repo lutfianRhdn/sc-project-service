@@ -8,6 +8,11 @@ describe('Federation Schema', () => {
     const mockWorkerInstance = {
       sendMessageToOtherWorker: jest.fn().mockResolvedValue({}),
       getuserId: jest.fn().mockResolvedValue('test-user-id'),
+      requestCounter: {
+        incrementTotal: jest.fn(),
+        incrementSuccessful: jest.fn(),
+        incrementFailed: jest.fn(),
+      },
     };
 
     const resolvers = createResolvers(mockWorkerInstance);
@@ -30,6 +35,11 @@ describe('Federation Schema', () => {
     const mockWorkerInstance = {
       sendMessageToOtherWorker: jest.fn().mockResolvedValue({ _id: 'test-id', title: 'Test Project' }),
       getuserId: jest.fn().mockResolvedValue('test-user-id'),
+      requestCounter: {
+        incrementTotal: jest.fn(),
+        incrementSuccessful: jest.fn(),
+        incrementFailed: jest.fn(),
+      },
     };
 
     const resolvers = createResolvers(mockWorkerInstance);
@@ -43,6 +53,11 @@ describe('Federation Schema', () => {
     const mockWorkerInstance = {
       sendMessageToOtherWorker: jest.fn().mockResolvedValue({ _id: 'test-id', title: 'Test Project' }),
       getuserId: jest.fn().mockResolvedValue('test-user-id'),
+      requestCounter: {
+        incrementTotal: jest.fn(),
+        incrementSuccessful: jest.fn(),
+        incrementFailed: jest.fn(),
+      },
     };
 
     const resolvers = createResolvers(mockWorkerInstance);
