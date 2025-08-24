@@ -3,6 +3,7 @@ import { Worker } from "./Worker";
 import Supervisor from "../supervisor";
 import { v4 as uuidv4 } from "uuid";
 import log from "../utils/log";
+import RequestCounter from "../utils/RequestCounter";
 import { Message, sendMessage, sendMessagetoSupervisor } from "../utils/handleMessage";
 import { RABBITMQ_URL } from "../configs/env";
 export class RabbitMQWorker implements Worker {
@@ -10,6 +11,7 @@ export class RabbitMQWorker implements Worker {
 	public isBusy: boolean = false; // Add isBusy property to track worker status
 	private string_connection: string;
 	private connection: amqp.ChannelModel | null = null; // Use null to indicate uninitialized state
+	private requestCounter: RequestCounter;
 
 	private consumeQueue: string = process.env.consumeQueue;
 	private consumeCompensationQueue: string =process.env.consumeCompensationQueue; // Add compensation queue
@@ -20,6 +22,7 @@ export class RabbitMQWorker implements Worker {
 
 	constructor() {
 		this.instanceId = `RabbitMqWorker-${uuidv4()}`;
+		this.requestCounter = RequestCounter.getInstance();
 		this.string_connection = process.env.rabbitMqUrl || RABBITMQ_URL;
 		this.run().catch((error) => {
 			log(
@@ -27,6 +30,24 @@ export class RabbitMQWorker implements Worker {
 				"error"
 			);
 		});
+	}
+
+	healthCheck(): void {
+		setInterval(
+			() => {
+				sendMessagetoSupervisor({
+					messageId: uuidv4(),
+					status: "healthy",
+					data: {
+						instanceId: this.instanceId,
+						timestamp: new Date().toISOString(),
+					},
+				});
+				// Log request statistics every health check
+				this.requestCounter.logStats();
+			},
+			10000
+		);
 	}
 
 	public async run(): Promise<void> {
@@ -72,6 +93,7 @@ export class RabbitMQWorker implements Worker {
 					"error"
 				);
 			});
+			this.healthCheck();
 			this.listenTask().catch((error) =>
 				log(
 					`[RabbitMQWorker] Error in linstenTask method: ${error.message}`,
@@ -108,33 +130,46 @@ export class RabbitMQWorker implements Worker {
 		this.consumeChannel.consume(
 			queueName,
 			(msg) => {
-				console.log(msg)
+				this.requestCounter.incrementTotal();
 				if (msg !== null) {
-					const messageContent = msg.content.toString();
-					const messageHeaders = msg.properties.headers;
-					const project_id = messageHeaders.project_id;
-					console.log("Received message:", messageContent);
-					console.log("Queue name:", queueName);
-					console.log("Project ID:", project_id);
-					if (queueName === this.consumeQueue) {
-						sendMessagetoSupervisor({
-							messageId: uuidv4(),
-							status: "completed",
-							data: JSON.parse(messageContent),
-							destination: [
-								`DatabaseInteractionWorker/updateStatus/${project_id}`,
-							],
-						});
-					} else if (
-						queueName === this.consumeCompensationQueue
-					) {
-						sendMessagetoSupervisor({
-							messageId: uuidv4(),
-							status: "completed",
-							data: JSON.parse(messageContent),
-							destination: ["DatabaseInteractionWorker/removeProject/"],
-						});
+					try {
+						const messageContent = msg.content.toString();
+						const messageHeaders = msg.properties.headers;
+						const project_id = messageHeaders.project_id;
+						log(`[RabbitMQWorker] Received message from queue: ${queueName}`, "info");
+						
+						if (queueName === this.consumeQueue) {
+							sendMessagetoSupervisor({
+								messageId: uuidv4(),
+								status: "completed",
+								data: JSON.parse(messageContent),
+								destination: [
+									`DatabaseInteractionWorker/updateStatus/${project_id}`,
+								],
+							});
+						} else if (
+							queueName === this.consumeCompensationQueue
+						) {
+							sendMessagetoSupervisor({
+								messageId: uuidv4(),
+								status: "completed",
+								data: JSON.parse(messageContent),
+								destination: ["DatabaseInteractionWorker/removeProject/"],
+							});
+						}
+						
+						this.requestCounter.incrementSuccessful();
+						log(`[RabbitMQWorker] Message processed successfully from queue: ${queueName}`, "success");
+					} catch (error) {
+						this.requestCounter.incrementFailed();
+						log(
+							`[RabbitMQWorker] Error processing message from queue ${queueName}: ${error.message}`,
+							"error"
+						);
 					}
+				} else {
+					this.requestCounter.incrementFailed();
+					log(`[RabbitMQWorker] Received null message from queue: ${queueName}`, "warn");
 				}
 			},
 			{ noAck: true }
@@ -155,6 +190,7 @@ export class RabbitMQWorker implements Worker {
 		data: any,
 		queueName: string = this.produceQueue
 	): Promise<void> {
+		this.requestCounter.incrementTotal();
 		try {
 			this.produceChannel = await this.connection.createChannel();
 			await this.produceChannel.assertQueue(queueName, {
@@ -176,41 +212,57 @@ export class RabbitMQWorker implements Worker {
 				messageBuffer,
 				{ persistent: true }
 			);
+			
+			this.requestCounter.incrementSuccessful();
+			log(`[RabbitMQWorker] Message sent successfully to queue: ${queueName}`, "success");
 		} catch (error) {
-			console.error("Failed to send message to RabbitMQ:", error);
+			this.requestCounter.incrementFailed();
+			log(
+				`[RabbitMQWorker] Failed to send message to queue ${queueName}: ${error.message}`,
+				"error"
+			);
 		}
 	}
 	async listenTask(): Promise<void> {
 		try {
 			process.on("message", async (message: Message) => {
-				const { messageId, data, status, reason,destination } = message;
-				log(
-					`[RabbitMQWorker] Received message: ${messageId}`,
-					"info"
-				);
-				const destinationFiltered = destination.filter((d) => d.includes("RabbitMQWorker"));
-				destinationFiltered.forEach((dest) => {
-					const destinationSplited = dest.split("/");
-					const path = destinationSplited[1]; // Get the path from the destination
+				this.requestCounter.incrementTotal();
+				try {
+					const { messageId, data, status, reason,destination } = message;
+					log(
+						`[RabbitMQWorker] Received message: ${messageId}`,
+						"info"
+					);
+					const destinationFiltered = destination.filter((d) => d.includes("RabbitMQWorker"));
+					destinationFiltered.forEach((dest) => {
+						const destinationSplited = dest.split("/");
+						const path = destinationSplited[1]; // Get the path from the destination
 
-					this[path](data, this.produceQueue)
-						.then(() => {
-							log(
-								`[RabbitMQWorker] Message ${messageId} sent to consume queue`,
-								"info"
-							);
-						})
-						.catch((error) => {
-							log(
-								`[RabbitMQWorker] Error sending message ${messageId} to consume queue: ${error.message}`,
-								"error"
-							);
-						});
+						this[path](data, this.produceQueue)
+							.then(() => {
+								log(
+									`[RabbitMQWorker] Message ${messageId} sent to consume queue`,
+									"info"
+								);
+							})
+							.catch((error) => {
+								log(
+									`[RabbitMQWorker] Error sending message ${messageId} to consume queue: ${error.message}`,
+									"error"
+								);
+							});
+						
+					});
 					
-				});
-				
-					
-					
+					this.requestCounter.incrementSuccessful();
+					log(`[RabbitMQWorker] Inter-worker message processed successfully: ${messageId}`, "success");
+				} catch (error) {
+					this.requestCounter.incrementFailed();
+					log(
+						`[RabbitMQWorker] Error processing inter-worker message: ${error.message}`,
+						"error"
+					);
+				}
 			});
 			// await this.produceMessage(task);
 		} catch (error) {
