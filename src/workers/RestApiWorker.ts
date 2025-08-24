@@ -1,6 +1,7 @@
 import { Worker } from "./Worker";
 import { v4 as uuidv4 } from "uuid";
 import log from "../utils/log";
+import RequestCounter from "../utils/RequestCounter";
 import { Controller, Get, attachControllers,Request,Response, Post, Params } from "@decorators/express";
 import express, { Express } from "express";
 import * as jwt from "jsonwebtoken";
@@ -22,10 +23,12 @@ export class RestApiWorker implements Worker {
 	public isBusy: boolean = false; // Add isBusy property to track worker status
 	private eventEmitter: EventEmitter = new EventEmitter();
 	private requests: Map<String, RequestType> = new Map();
+	private requestCounter: RequestCounter;
+
 	constructor() {
 		this.instanceId = `RestApiWorker-${uuidv4()}`;
+		this.requestCounter = RequestCounter.getInstance();
 		this.run().catch((error) => {
-			console.log(error);
 			log(
 				`[RestApiWorker] Error in run method: ${error.message}`,
 				"error"
@@ -34,7 +37,7 @@ export class RestApiWorker implements Worker {
 	}
 	healthCheck(): void {
 		setInterval(
-			() =>
+			() => {
 				sendMessagetoSupervisor({
 					messageId: uuidv4(),
 					status: "healthy",
@@ -42,7 +45,10 @@ export class RestApiWorker implements Worker {
 						instanceId: this.instanceId,
 						timestamp: new Date().toISOString(),
 					},
-				}),
+				});
+				// Log request statistics every health check
+				this.requestCounter.logStats();
+			},
 			10000
 		);
 	}
@@ -124,28 +130,23 @@ export class RestApiWorker implements Worker {
 				reject(new Error("Unauthorized"));
 			}
 			const token = authorization.split(" ")[1];
-			console.log(process.env.jwt_secret);
 			jwt.verify(
 				token,
 				process.env.jwt_secret as string,
 				(err, decoded) => {
 					if (err) {
 						log(`[RestApiWorker] Invalid token`, "warn");
-						console.error(
-							`[RestApiWorker] Token verification failed: ${err.message}`
-						);
 						reject(err);
 					}
-					console.log(decoded);
 					if (typeof decoded !== "string" && "_id" in decoded) {
+						log(
+							`[RestApiWorker] Token verified successfully`,
+							"info"
+						);
 						resolve(decoded._id);
 					}
 					log(`[RestApiWorker] Invalid token payload`, "warn");
 					reject(new Error("Invalid token payload"));
-					log(
-						`[RestApiWorker] Token verified successfully`,
-						"info"
-					);
 				}
 			);
 		});
@@ -177,26 +178,27 @@ export class RestApiWorker implements Worker {
 
 	@Get("/")
 	async getData(@Request() req, @Response() res) {
+		this.requestCounter.incrementTotal();
 		try {
 			const userId = await this.getuserId(
 				req.headers.authorization,
 				res
 			);
-			console.log(userId);
 			const result = await this.sendMessageToOtherWorker({}, [
 				`DatabaseInteractionWorker/getAllData/${userId}`,
 			]);
-			console.log({result});
 			if (result) {
+				this.requestCounter.incrementSuccessful();
+				log(`[RestApiWorker] GET request completed successfully`, "success");
 				res.json({ data: result });
 			}
 		} catch (error) {
-			console.log(error);
+			this.requestCounter.incrementFailed();
 			log(
 				`[RestApiWorker] Error in getData: ${error.message}`,
 				"error"
 			);
-			return res.json({ error: error.message });
+			return res.status(500).json({ error: error.message });
 		}
 	}
 	@Get("/:id")
@@ -205,13 +207,10 @@ export class RestApiWorker implements Worker {
 		@Response() res,
 		@Params("id") id: string
 	) {
+		this.requestCounter.incrementTotal();
 		try {
-			// const userId = await this.getuserId(
-			// 	req.headers.authorization,
-			// 	res
-			// );
-
 			if (!id) {
+				this.requestCounter.incrementFailed();
 				log(`[RestApiWorker] Data ID not provided`, "warn");
 				return res
 					.status(400)
@@ -221,15 +220,54 @@ export class RestApiWorker implements Worker {
 				`DatabaseInteractionWorker/getDataById/${id}`,
 			]);
 			if (result) {
+				this.requestCounter.incrementSuccessful();
+				log(`[RestApiWorker] GET by ID request completed successfully`, "success");
 				res.json({ data: result });
 			}
 		} catch (error) {
-			console.log(error);
+			this.requestCounter.incrementFailed();
 			log(
-				`[RestApiWorker] Error in getData: ${error.message}`,
+				`[RestApiWorker] Error in getDataById: ${error.message}`,
 				"error"
 			);
-			return res.json({ error: error.message });
+			return res.status(500).json({ error: error.message });
+		}
+	}
+
+	@Get("/stats")
+	async getStats(@Request() req, @Response() res) {
+		try {
+			const stats = this.requestCounter.getStats();
+			const uptime = Math.round((Date.now() - stats.startTime.getTime()) / 1000);
+			
+			log(`[RestApiWorker] Stats requested`, "info");
+			res.json({
+				stats: {
+					...stats,
+					uptime_seconds: uptime
+				}
+			});
+		} catch (error) {
+			log(
+				`[RestApiWorker] Error in getStats: ${error.message}`,
+				"error"
+			);
+			return res.status(500).json({ error: "Internal Server Error" });
+		}
+	}
+
+	@Post("/stats/reset")
+	async resetStats(@Request() req, @Response() res) {
+		try {
+			this.requestCounter.reset();
+			log(`[RestApiWorker] Stats reset requested`, "info");
+			res.json({ message: "Stats reset successfully" });
+		} catch (error) {
+			log(
+				`[RestApiWorker] Error in resetStats: ${error.message}`,
+				"error"
+			);
+			return res.status(500).json({ error: "Internal Server Error" });
 		}
 	}
 
@@ -245,6 +283,8 @@ export class RestApiWorker implements Worker {
 			start_date_crawl,
 			end_date_crawl,
 		} = req.body;
+		
+		this.requestCounter.incrementTotal();
 		try {
 			const userId = await this.getuserId(
 				req.headers.authorization,
@@ -253,6 +293,7 @@ export class RestApiWorker implements Worker {
 
 			const idempotentKey = req.headers["idempotent-key"];
 			if (!idempotentKey) {
+				this.requestCounter.incrementFailed();
 				log(`[RestApiWorker] Idempotent key not provided`, "warn");
 				return res
 					.status(400)
@@ -276,6 +317,7 @@ export class RestApiWorker implements Worker {
 					},
 					[`DatabaseInteractionWorker/getDataByKeywordAndRange`]
 				);
+				this.requestCounter.incrementSuccessful();
 				return res.status(208).json({
 					data,
 					message: "Operation already processed",
@@ -298,11 +340,13 @@ export class RestApiWorker implements Worker {
 				},
 				[`DatabaseInteractionWorker/createNewData`]
 			);
-			log(`[RestApiWorker] Data created successfully`, "success");
+			log(`[RestApiWorker] POST request completed successfully`, "success");
 
 			idempotent.removeIdempotent(idempotentKey);
+			this.requestCounter.incrementSuccessful();
 			return res.status(201).json({ data: result });
 		} catch (error) {
+			this.requestCounter.incrementFailed();
 			log(
 				`[RestApiWorker] Error in postData: ${error.message}`,
 				"error"

@@ -2,6 +2,24 @@ import { GraphQLWorker } from '../workers/GraphQLWorker';
 
 // Mock dependencies
 jest.mock('../utils/log', () => jest.fn());
+jest.mock('../utils/RequestCounter', () => ({
+  __esModule: true,
+  default: {
+    getInstance: jest.fn().mockReturnValue({
+      incrementTotal: jest.fn(),
+      incrementSuccessful: jest.fn(),
+      incrementFailed: jest.fn(),
+      logStats: jest.fn(),
+      getStats: jest.fn().mockReturnValue({
+        total: 0,
+        successful: 0,
+        failed: 0,
+        startTime: new Date(),
+      }),
+      reset: jest.fn(),
+    }),
+  },
+}));
 jest.mock('../utils/handleMessage', () => ({
   sendMessagetoSupervisor: jest.fn(),
 }));
