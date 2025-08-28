@@ -171,11 +171,20 @@ export class RabbitMQWorker implements Worker {
 				end_date_crawl: data.end_date_crawl,
 				tweetToken: data.tweetToken,
 			}));
+			console.log(`[RabbitMQWorker] sending message to ${queueName}, with data :${JSON.stringify({
+				projectId: data._id,
+				keyword: data.keyword,
+				language: data.language,
+				start_date_crawl: data.start_date_crawl,
+				end_date_crawl: data.end_date_crawl,
+				tweetToken: data.tweetToken,
+			})}`)
 			this.produceChannel.sendToQueue(
 				queueName, // Use the specified queue name
 				messageBuffer,
 				{ persistent: true }
 			);
+			console.log(`successfuly sendding message to ${queueName}`)
 		} catch (error) {
 			console.error("Failed to send message to RabbitMQ:", error);
 		}
